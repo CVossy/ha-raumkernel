@@ -1,3 +1,10 @@
+## 1.2.18
+
+- Fix: Raumfeld devices sometimes do not switch to a different source if previously in Spotify Connect mode (#68).
+- Fix: Prevent add-on crashes in some situations (#69).
+- Fix: Add additional type and power state guards when devices are in standby or power save mode.
+- Improvement: Devices create virtual zones faster when coming out of standby. 
+
 ## 1.2.17
 
 - Maintenance release: upgrade dependencies 
