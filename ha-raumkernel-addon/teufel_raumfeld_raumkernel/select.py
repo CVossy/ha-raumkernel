@@ -24,6 +24,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Raumfeld select entities."""
+    _LOGGER.info("Setting up Raumfeld select entities for entry %s", entry.entry_id)
     client: RaumfeldApiClient = hass.data[DOMAIN][entry.entry_id]
     async_add_entities([RaumfeldSpotifyPrimarySelectEntity(client, entry.entry_id)])
 

@@ -30,6 +30,24 @@
 import { JSDOM } from 'jsdom';
 import * as RaumkernelLib from 'node-raumkernel';
 import { EventEmitter } from 'events';
+import { createRequire } from 'module';
+
+// Patch node-raumkernel MediaDataConverter to handle items with missing upnp:class (e.g. bare <item restricted="1" />)
+const require = createRequire(import.meta.url);
+try {
+    const MediaDataConverter = require('node-raumkernel/lib/lib.mediaDataConverter');
+    if (MediaDataConverter?.prototype?.convertContainer) {
+        const origConvertContainer = MediaDataConverter.prototype.convertContainer;
+        MediaDataConverter.prototype.convertContainer = function(_mediaContainer) {
+            if (_mediaContainer && !_mediaContainer['upnp:class']) {
+                _mediaContainer['upnp:class'] = ['object.item'];
+            }
+            return origConvertContainer.call(this, _mediaContainer);
+        };
+    }
+} catch (e) {
+    console.warn('Could not patch MediaDataConverter:', e.message);
+}
 
 // ============================================================================
 // TYPE DEFINITIONS (JSDoc for IDE support)
