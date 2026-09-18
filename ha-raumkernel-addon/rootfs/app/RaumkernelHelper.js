@@ -298,7 +298,7 @@ class RaumkernelHelper extends EventEmitter {
         const mode = multiroom ? 'multiRoom' : 'singleRoom';
         const response = await fetch(
             `http://${host}:47365/setSpotifyMode?mode=${mode}`,
-            { redirect: 'follow' }
+            { redirect: 'follow', signal: AbortSignal.timeout(5000) }
         );
 
         if (!response.ok) {
