@@ -84,15 +84,12 @@ class RaumfeldSpotifyPrimarySelectEntity(SelectEntity):
 
         # Update available room options
         available_rooms = payload.get("availableRooms", [])
-        new_options = [r["name"] for r in available_rooms if "name" in r and r["name"]]
-        new_options = sorted(list(set(new_options)))
-
+        room_names = {r["name"] for r in available_rooms if "name" in r and r["name"]}
         primary_room = payload.get("spotifyPrimaryRoom")
-        if primary_room and primary_room not in new_options:
-            new_options.append(primary_room)
-            new_options = sorted(new_options)
+        if primary_room:
+            room_names.add(primary_room)
 
-        self._attr_options = new_options
+        self._attr_options = sorted(room_names)
         self._attr_current_option = primary_room
 
         self.async_write_ha_state()
