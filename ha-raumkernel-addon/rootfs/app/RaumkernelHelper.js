@@ -350,8 +350,9 @@ class RaumkernelHelper extends EventEmitter {
         }
 
         const mode = multiroom ? 'multiRoom' : 'singleRoom';
+        const port = this.raumkernel?.getSettings()?.raumfeldHostRequestPort || 47365;
         const response = await fetch(
-            `http://${host}:47365/setSpotifyMode?mode=${mode}`,
+            `http://${host}:${port}/setSpotifyMode?mode=${mode}`,
             { redirect: 'follow', signal: AbortSignal.timeout(5000) }
         );
 
@@ -422,8 +423,9 @@ class RaumkernelHelper extends EventEmitter {
         }
 
         console.log(`${LOG_PREFIX.REGISTRY} Setting Spotify primary zone to ${zoneUdn} for room ${targetRoom.name}`);
+        const port = this.raumkernel?.getSettings()?.raumfeldHostRequestPort || 47365;
         const response = await fetch(
-            `http://${host}:47365/setSpotifyZone?udn=${encodeURIComponent(zoneUdn)}`,
+            `http://${host}:${port}/setSpotifyZone?udn=${encodeURIComponent(zoneUdn)}`,
             { redirect: 'follow', signal: AbortSignal.timeout(5000) }
         );
 
