@@ -132,8 +132,10 @@ class RaumkernelHelper extends EventEmitter {
         this._state = {
             isReady: false,
             availableRooms: [],
-            favourites: []
+            favourites: [],
+            spotifyMode: null
         };
+        this._systemHost = null;
 
         this._setupLogging();
         this._setupEventHandlers();
@@ -193,6 +195,10 @@ class RaumkernelHelper extends EventEmitter {
     }
 
     _setupEventHandlers() {
+        this.raumkernel.on('systemHostFound', (host) => {
+            this._systemHost = host;
+        });
+
         this.raumkernel.on('systemReady', (ready) => {
             console.log(`${LOG_PREFIX.REGISTRY} System ready: ${ready}`);
             this._state.isReady = ready;
@@ -205,6 +211,7 @@ class RaumkernelHelper extends EventEmitter {
 
                 // Process initial zone state
                 const zoneManager = this._getZoneManager();
+                this._updateSpotifyMode(zoneManager?.zoneConfiguration);
                 if (zoneManager && zoneManager.zoneState) {
                     console.log(`${LOG_PREFIX.REGISTRY} Processing initial zone state`);
                     this._handleZoneStateChange(zoneManager.zoneState);
@@ -224,11 +231,17 @@ class RaumkernelHelper extends EventEmitter {
 
         this.raumkernel.on('systemHostLost', () => {
             console.log(`${LOG_PREFIX.REGISTRY} System host lost`);
+            this._systemHost = null;
             this._resetState();
         });
 
         this.raumkernel.on('combinedZoneStateChanged', (data) => {
             this._handleZoneStateChange(data);
+        });
+
+        this.raumkernel.on('zoneConfigurationChanged', (config) => {
+            this._updateSpotifyMode(config);
+            this._broadcastRoomStates();
         });
 
         this.raumkernel.on('rendererStateChanged', () => {
@@ -249,7 +262,12 @@ class RaumkernelHelper extends EventEmitter {
 
     _resetState() {
         this._stopPositionPolling();
-        this._state = { isReady: false, availableRooms: [], favourites: [] };
+        this._state = {
+            isReady: false,
+            availableRooms: [],
+            favourites: [],
+            spotifyMode: null
+        };
         this._rooms.clear();
     }
 
@@ -262,6 +280,30 @@ class RaumkernelHelper extends EventEmitter {
      */
     getState() {
         return this._state;
+    }
+
+    _updateSpotifyMode(config) {
+        const mode = config?.zoneConfig?.$?.spotifyMode;
+        if (mode === 'multiRoom' || mode === 'singleRoom') {
+            this._state.spotifyMode = mode;
+        }
+    }
+
+    async setSpotifyMode(multiroom) {
+        const host = this._systemHost || this.raumkernel.getSettings().raumfeldHost;
+        if (!host || host === '0.0.0.0') {
+            throw new Error('Raumfeld system host not available');
+        }
+
+        const mode = multiroom ? 'multiRoom' : 'singleRoom';
+        const response = await fetch(
+            `http://${host}:47365/setSpotifyMode?mode=${mode}`,
+            { redirect: 'follow' }
+        );
+
+        if (!response.ok) {
+            throw new Error(`setSpotifyMode failed: HTTP ${response.status}`);
+        }
     }
 
     // ========================================================================
