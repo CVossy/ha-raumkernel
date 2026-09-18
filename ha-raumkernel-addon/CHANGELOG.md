@@ -1,6 +1,8 @@
 ## 1.2.19
 
 - Feature: Add Spotify multiroom switch to toggle between multi-room and single-room mode (#73).
+- Feature: Add Spotify primary room select entity to choose the active Spotify Connect speaker in multiroom mode (#73).
+- Fix: Prevent add-on crash when handling UPnP media items missing `upnp:class` during Spotify Connect playback transitions (#73).
 - Fix: Media info (title, artist, album, cover art) did not update when the track changed during playback, while the progress bar did. The position poll now also applies the track metadata returned by the same `GetPositionInfo` call, so the now-playing details stay in sync with the progress (#72).
 
 ## 1.2.18
