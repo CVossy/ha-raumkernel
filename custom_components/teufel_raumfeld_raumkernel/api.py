@@ -245,6 +245,10 @@ class RaumfeldApiClient:
         """Set Spotify multiroom mode."""
         await self.send_command("setSpotifyMode", {"multiroom": multiroom})
 
+    async def set_spotify_primary_room(self, room: str) -> None:
+        """Set Spotify multiroom primary room."""
+        await self.send_command("setSpotifyPrimaryRoom", {"room": room})
+
     async def select_source(self, room_udn: str, source: str) -> None:
         """Select input source."""
         await self.send_command("selectSource", {"room": room_udn, "source": source})

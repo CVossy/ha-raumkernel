@@ -133,7 +133,9 @@ class RaumkernelHelper extends EventEmitter {
             isReady: false,
             availableRooms: [],
             favourites: [],
-            spotifyMode: null
+            spotifyMode: null,
+            spotifyPrimaryRoom: null,
+            spotifyPrimaryRoomUdn: null
         };
         this._systemHost = null;
 
@@ -211,7 +213,7 @@ class RaumkernelHelper extends EventEmitter {
 
                 // Process initial zone state
                 const zoneManager = this._getZoneManager();
-                this._updateSpotifyMode(zoneManager?.zoneConfiguration);
+                this._updateSpotifyState(zoneManager?.zoneConfiguration);
                 if (zoneManager && zoneManager.zoneState) {
                     console.log(`${LOG_PREFIX.REGISTRY} Processing initial zone state`);
                     this._handleZoneStateChange(zoneManager.zoneState);
@@ -240,7 +242,7 @@ class RaumkernelHelper extends EventEmitter {
         });
 
         this.raumkernel.on('zoneConfigurationChanged', (config) => {
-            this._updateSpotifyMode(config);
+            this._updateSpotifyState(config);
             this._broadcastRoomStates();
         });
 
@@ -266,7 +268,9 @@ class RaumkernelHelper extends EventEmitter {
             isReady: false,
             availableRooms: [],
             favourites: [],
-            spotifyMode: null
+            spotifyMode: null,
+            spotifyPrimaryRoom: null,
+            spotifyPrimaryRoomUdn: null
         };
         this._rooms.clear();
     }
@@ -282,11 +286,43 @@ class RaumkernelHelper extends EventEmitter {
         return this._state;
     }
 
-    _updateSpotifyMode(config) {
+    _updateSpotifyState(config) {
         const mode = config?.zoneConfig?.$?.spotifyMode;
         if (mode === 'multiRoom' || mode === 'singleRoom') {
             this._state.spotifyMode = mode;
         }
+
+        let primaryRoomName = null;
+        let primaryRoomUdn = null;
+        let primaryZoneUdn = null;
+
+        const zonesRoot = config?.zoneConfig?.zones;
+        if (zonesRoot) {
+            const rootArray = Array.isArray(zonesRoot) ? zonesRoot : [zonesRoot];
+            for (const root of rootArray) {
+                if (!root?.zone) continue;
+                const zoneArray = Array.isArray(root.zone) ? root.zone : [root.zone];
+                for (const zone of zoneArray) {
+                    if (zone?.$?.spotifyConnect) {
+                        primaryZoneUdn = zone.$.udn;
+                        const rooms = zone.room;
+                        if (rooms) {
+                            const roomArray = Array.isArray(rooms) ? rooms : [rooms];
+                            if (roomArray.length > 0 && roomArray[0]?.$) {
+                                primaryRoomName = roomArray[0].$.name ?? null;
+                                primaryRoomUdn = roomArray[0].$.udn ?? null;
+                            }
+                        }
+                        break;
+                    }
+                }
+                if (primaryZoneUdn) break;
+            }
+        }
+
+        this._state.spotifyPrimaryRoom = primaryRoomName;
+        this._state.spotifyPrimaryRoomUdn = primaryRoomUdn;
+        this._state.spotifyPrimaryZoneUdn = primaryZoneUdn;
     }
 
     async setSpotifyMode(multiroom) {
@@ -304,6 +340,84 @@ class RaumkernelHelper extends EventEmitter {
         if (!response.ok) {
             throw new Error(`setSpotifyMode failed: HTTP ${response.status}`);
         }
+    }
+
+    async setSpotifyPrimaryRoom(roomNameOrUdn) {
+        const host = this._systemHost || this.raumkernel.getSettings().raumfeldHost;
+        if (!host || host === '0.0.0.0') {
+            throw new Error('Raumfeld system host not available');
+        }
+
+        if (!roomNameOrUdn) {
+            throw new Error('Room name or UDN must be provided');
+        }
+
+        // Find room in registered rooms map
+        let targetRoom = null;
+        for (const room of this._rooms.values()) {
+            if (room.roomUdn === roomNameOrUdn || room.name === roomNameOrUdn) {
+                targetRoom = room;
+                break;
+            }
+        }
+
+        // Fallback: search mediaRenderers in deviceManager
+        if (!targetRoom) {
+            const deviceManager = this._getDeviceManager();
+            if (deviceManager) {
+                for (const renderer of deviceManager.mediaRenderers.values()) {
+                    const roomUdn = renderer.roomUdn ? renderer.roomUdn() : null;
+                    const name = renderer.roomName ? renderer.roomName() : null;
+                    if (roomUdn === roomNameOrUdn || name === roomNameOrUdn) {
+                        targetRoom = { roomUdn, name };
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!targetRoom) {
+            throw new Error(`Room not found: ${roomNameOrUdn}`);
+        }
+
+        const zoneManager = this._getZoneManager();
+        if (!zoneManager) {
+            throw new Error('ZoneManager not available');
+        }
+
+        let zoneUdn = zoneManager.getZoneUDNFromRoomUDN(targetRoom.roomUdn);
+
+        // If room is unassigned (not currently in a zone), create a zone for it
+        if (!zoneUdn) {
+            console.log(`${LOG_PREFIX.REGISTRY} Room ${targetRoom.name} (${targetRoom.roomUdn}) has no zone. Creating zone...`);
+            await zoneManager.connectRoomToZone(targetRoom.roomUdn, '', false);
+            // Wait up to 3s for zone to be assigned
+            const startTime = Date.now();
+            while (!zoneUdn && (Date.now() - startTime < 3000)) {
+                await new Promise(resolve => setTimeout(resolve, 150));
+                zoneUdn = zoneManager.getZoneUDNFromRoomUDN(targetRoom.roomUdn);
+            }
+        }
+
+        if (!zoneUdn) {
+            throw new Error(`Could not determine zone for room: ${targetRoom.name}`);
+        }
+
+        console.log(`${LOG_PREFIX.REGISTRY} Setting Spotify primary zone to ${zoneUdn} for room ${targetRoom.name}`);
+        const response = await fetch(
+            `http://${host}:47365/setSpotifyZone?udn=${encodeURIComponent(zoneUdn)}`,
+            { redirect: 'follow', signal: AbortSignal.timeout(5000) }
+        );
+
+        if (!response.ok) {
+            throw new Error(`setSpotifyZone failed: HTTP ${response.status}`);
+        }
+
+        // Optimistically update state
+        this._state.spotifyPrimaryRoom = targetRoom.name;
+        this._state.spotifyPrimaryRoomUdn = targetRoom.roomUdn;
+        this._state.spotifyPrimaryZoneUdn = zoneUdn;
+        this.emit('roomStatesUpdated', this._state);
     }
 
     // ========================================================================

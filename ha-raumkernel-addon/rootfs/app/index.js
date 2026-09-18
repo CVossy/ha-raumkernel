@@ -386,6 +386,10 @@ wss.on('connection', (ws) => {
                     await rkHelper.setSpotifyMode(payload.multiroom);
                     break;
 
+                case 'setSpotifyPrimaryRoom':
+                    await rkHelper.setSpotifyPrimaryRoom(payload.room);
+                    break;
+
                 default:
                     console.warn('Unknown command:', command);
             }
